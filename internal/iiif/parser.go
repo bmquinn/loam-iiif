@@ -80,6 +80,7 @@ type IIIFCollection struct {
 	Sequences []json.RawMessage `json:"sequences,omitempty"`
 }
 
+// ParseData reads the raw JSON and returns a list of items (Collection + Manifest).
 func ParseData(data []byte) []list.Item {
 	var collection IIIFCollection
 	if err := json.Unmarshal(data, &collection); err != nil {
@@ -93,38 +94,54 @@ func ParseData(data []byte) []list.Item {
 
 	items := []list.Item{}
 
-	// Handle Collection type resources
+	// If it's a Collection-type resource
 	if isCollectionType(collection.Type) {
+
 		// Process items array
 		for _, item := range collection.Items {
-			if isManifestType(item.Type) {
+			switch {
+			case isManifestType(item.Type):
+				// It's a manifest
 				items = append(items, ui.Item{
-					URL:   item.ID,
-					Title: item.Label.GetText(),
+					URL:      item.ID,
+					Title:    item.Label.GetText(),
+					ItemType: "Manifest",
+				})
+
+			case isCollectionType(item.Type):
+				// It's a child collection
+				items = append(items, ui.Item{
+					URL:      item.ID,
+					Title:    item.Label.GetText(),
+					ItemType: "Collection",
 				})
 			}
 		}
 
-		// Process manifests array (older IIIF versions)
+		// Also handle older IIIF v2 "manifests" array if present
 		for _, manifest := range collection.Manifests {
 			items = append(items, ui.Item{
-				URL:   manifest.ID,
-				Title: manifest.Label.GetText(),
+				URL:      manifest.ID,
+				Title:    manifest.Label.GetText(),
+				ItemType: "Manifest",
 			})
 		}
+
 	} else if isManifestType(collection.Type) {
-		// Handle single manifest
+		// If it's a single Manifest
 		items = append(items, ui.Item{
-			URL:   collection.ID,
-			Title: collection.Label.GetText(),
+			URL:      collection.ID,
+			Title:    collection.Label.GetText(),
+			ItemType: "Manifest",
 		})
 	}
 
+	// If we didn't find anything
 	if len(items) == 0 {
 		return []list.Item{
 			ui.Item{
 				URL:   "Error",
-				Title: "No valid manifests found in IIIF resource",
+				Title: "No valid manifests or child collections found",
 			},
 		}
 	}
@@ -132,11 +149,13 @@ func ParseData(data []byte) []list.Item {
 	return items
 }
 
+// We consider type "Collection" if it matches these known patterns
 func isCollectionType(t string) bool {
 	t = strings.ToLower(t)
 	return t == "collection" || t == "sc:collection" || strings.HasPrefix(t, "collection")
 }
 
+// We consider type "Manifest" if it matches these known patterns
 func isManifestType(t string) bool {
 	t = strings.ToLower(t)
 	return t == "manifest" || t == "sc:manifest" || strings.HasPrefix(t, "manifest")
