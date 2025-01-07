@@ -9,11 +9,13 @@ import (
 func (m *Model) View() string {
 	var sections []string
 
+	// Title and TextArea
 	sections = append(sections,
 		TitleStyle.Render("LoamIIIF"),
 		FocusedBorderStyle.Render(m.TextArea.View()),
 	)
 
+	// Status
 	statusContent := m.Status
 	if m.Loading {
 		statusContent = fmt.Sprintf("%s %s", m.Spinner.View(), m.Status)
@@ -23,13 +25,30 @@ func (m *Model) View() string {
 		BorderStyle.Render(statusContent),
 	)
 
-	sections = append(sections,
-		TitleStyle.Render("Results"),
-		BorderStyle.Render(m.List.View()),
-	)
+	// If showing detail, render detail pane; otherwise, render list
+	if m.ShowDetail {
+		// Show selected record detail
+		detailString := fmt.Sprintf(
+			"Title: %s\nURL:   %s",
+			m.SelectedItem.Title,
+			m.SelectedItem.URL,
+		)
 
+		sections = append(sections,
+			TitleStyle.Render("Record Detail"),
+			BorderStyle.Render(detailString),
+		)
+	} else {
+		// Show list
+		sections = append(sections,
+			TitleStyle.Render("Results"),
+			BorderStyle.Render(m.List.View()),
+		)
+	}
+
+	// Footer help
 	sections = append(sections,
-		HelpStyle.Render("Tab: Switch Focus | Enter: Submit URL | O: Open URL | Ctrl+C/Esc: Quit"),
+		HelpStyle.Render("Tab: Switch Focus | Enter: Submit URL (or Open Detail) | O: Open URL | Esc: Quit/Close Detail"),
 	)
 
 	mainContent := lipgloss.JoinVertical(lipgloss.Left, sections...)

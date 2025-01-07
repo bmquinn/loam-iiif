@@ -10,14 +10,16 @@ import (
 )
 
 type Model struct {
-	TextArea textarea.Model
-	List     list.Model
-	Status   string
-	Spinner  spinner.Model
-	Loading  bool
-	Mutex    sync.Mutex
-	InList   bool
-	Width    int
+	TextArea     textarea.Model
+	List         list.Model
+	Status       string
+	Spinner      spinner.Model
+	Loading      bool
+	Mutex        sync.Mutex
+	InList       bool
+	Width        int
+	ShowDetail   bool
+	SelectedItem ui.Item
 }
 
 func InitialModel() *Model {
@@ -47,12 +49,14 @@ func InitialModel() *Model {
 	s.Style = SpinnerStyle
 
 	return &Model{
-		TextArea: ta,
-		List:     l,
-		Status:   "Ready",
-		Spinner:  s,
-		Loading:  false,
-		InList:   false,
-		Width:    40,
+		TextArea:     ta,
+		List:         l,
+		Status:       "Ready",
+		Spinner:      s,
+		Loading:      false,
+		InList:       false,
+		Width:        40,
+		ShowDetail:   false,
+		SelectedItem: ui.Item{},
 	}
 }

@@ -65,8 +65,26 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 		return m, nil
 
 	case bubbletea.KeyMsg:
+		key := msg.String()
+
+		// If detail pane is open, check if user wants to close it with "esc"
+		if m.ShowDetail {
+			switch key {
+			case "ctrl+c":
+				return m, bubbletea.Quit
+			case "esc":
+				// Close the detail pane
+				m.ShowDetail = false
+				m.Status = "Closed detail pane."
+				return m, nil
+			}
+			// If the detail pane is open, we ignore other keys
+			return m, nil
+		}
+
+		// If we are NOT in the list, handle text input or switching
 		if !m.InList {
-			switch msg.String() {
+			switch key {
 			case "ctrl+c", "esc":
 				return m, bubbletea.Quit
 			case "tab":
@@ -101,19 +119,38 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 			return m, bubbletea.Batch(cmds...)
 		}
 
-		switch msg.String() {
-		case "ctrl+c", "esc":
+		// If we ARE in the list:
+		switch key {
+		case "ctrl+c":
 			return m, bubbletea.Quit
+
+		case "esc":
+			// Quit
+			return m, bubbletea.Quit
+
 		case "tab":
 			m.TextArea.Focus()
 			m.InList = false
 			m.Status = "Ready"
 			return m, nil
+
 		case "up", "down", "k", "j":
+			// If the status was "Opened in browser", reset it
 			if m.Status == "Opened in browser" {
 				m.Status = "Ready"
 			}
+
+		case "enter":
+			// Show the detail pane for the currently selected item
+			if item, ok := m.List.SelectedItem().(ui.Item); ok {
+				m.SelectedItem = item
+				m.ShowDetail = true
+				m.Status = fmt.Sprintf("Viewing detail: %s", item.Title)
+			}
+			return m, nil
+
 		case "o", "O":
+			// 'Open in browser'
 			if item, ok := m.List.SelectedItem().(ui.Item); ok && item.URL != "Error" {
 				if err := iiif.OpenURL(item.URL); err != nil {
 					m.Status = "Failed to open URL"
@@ -123,6 +160,7 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 				return m, nil
 			}
 		}
+
 		var cmd bubbletea.Cmd
 		m.List, cmd = m.List.Update(msg)
 		cmds = append(cmds, cmd)
