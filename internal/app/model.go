@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 )
 
+// Model is the main application model.
 type Model struct {
 	TextArea     textarea.Model
 	List         list.Model
@@ -20,6 +21,11 @@ type Model struct {
 	Width        int
 	ShowDetail   bool
 	SelectedItem ui.Item
+
+	// Keep a stack of item slices to allow "going back".
+	// Each time we fetch new data for a nested collection,
+	// we push the old list onto this stack.
+	PrevItemsStack [][]list.Item
 }
 
 func InitialModel() *Model {
@@ -49,14 +55,15 @@ func InitialModel() *Model {
 	s.Style = SpinnerStyle
 
 	return &Model{
-		TextArea:     ta,
-		List:         l,
-		Status:       "Ready",
-		Spinner:      s,
-		Loading:      false,
-		InList:       false,
-		Width:        40,
-		ShowDetail:   false,
-		SelectedItem: ui.Item{},
+		TextArea:       ta,
+		List:           l,
+		Status:         "Ready",
+		Spinner:        s,
+		Loading:        false,
+		InList:         false,
+		Width:          40,
+		ShowDetail:     false,
+		SelectedItem:   ui.Item{},
+		PrevItemsStack: make([][]list.Item, 0),
 	}
 }

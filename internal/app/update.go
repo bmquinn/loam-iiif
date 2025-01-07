@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/bmquinn/loam-iiif/internal/iiif"
 	"github.com/bmquinn/loam-iiif/internal/types"
@@ -85,8 +86,13 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 		// If we are NOT in the list, handle text input or switching
 		if !m.InList {
 			switch key {
-			case "ctrl+c", "esc":
+			case "ctrl+c":
+				// (NEW) We remove "esc" from here so it doesn't quit.
 				return m, bubbletea.Quit
+
+			// case "esc": do nothing here, or implement "go back" if you want
+			// to return from the input form to something else. Usually not needed.
+
 			case "tab":
 				m.TextArea.Blur()
 				m.InList = true
@@ -95,6 +101,7 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 					m.List.Select(0)
 				}
 				return m, nil
+
 			case "enter":
 				urlInput := m.TextArea.Value()
 				if urlInput != "" {
@@ -122,11 +129,25 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 		// If we ARE in the list:
 		switch key {
 		case "ctrl+c":
+			// Only Ctrl+C quits. (Removed "esc" here!)
 			return m, bubbletea.Quit
 
 		case "esc":
-			// Quit
-			return m, bubbletea.Quit
+			// (NEW) Instead of quitting, let's go "back" if possible.
+			if len(m.PrevItemsStack) > 0 {
+				// Pop the last item slice from the stack
+				lastIndex := len(m.PrevItemsStack) - 1
+				prevItems := m.PrevItemsStack[lastIndex]
+				m.PrevItemsStack = m.PrevItemsStack[:lastIndex]
+
+				// Restore the previous list
+				m.List.SetItems(prevItems)
+				m.Status = "Went back to previous list."
+			} else {
+				// No previous list: do nothing or set a status
+				m.Status = "No previous items to go back to."
+			}
+			return m, nil
 
 		case "tab":
 			m.TextArea.Focus()
@@ -141,11 +162,27 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 			}
 
 		case "enter":
-			// Show the detail pane for the currently selected item
+			// Show detail or fetch nested collection
 			if item, ok := m.List.SelectedItem().(ui.Item); ok {
-				m.SelectedItem = item
-				m.ShowDetail = true
-				m.Status = fmt.Sprintf("Viewing detail: %s", item.Title)
+				if strings.EqualFold(item.ItemType, "collection") {
+					// (NEW) Before we fetch nested items, push the CURRENT list onto the stack
+					currentItems := m.List.Items()
+					m.PrevItemsStack = append(m.PrevItemsStack, currentItems)
+
+					// Now fetch the new collection
+					m.Status = "Fetching nested collection..."
+					m.Loading = true
+					return m, bubbletea.Batch(
+						iiif.FetchData(item.URL),
+						m.Spinner.Tick,
+					)
+
+				} else {
+					// It's a manifest (or something else)
+					m.SelectedItem = item
+					m.ShowDetail = true
+					m.Status = fmt.Sprintf("Viewing detail: %s", item.Title)
+				}
 			}
 			return m, nil
 
@@ -166,11 +203,14 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case types.FetchDataMsg:
-		items := iiif.ParseData(msg)
+		// We got new data back from the IIIF API
+		newItems := iiif.ParseData(msg)
+
 		m.Mutex.Lock()
-		m.List.SetItems(items)
+		m.List.SetItems(newItems)
 		m.Mutex.Unlock()
-		m.Status = fmt.Sprintf("Fetched %d items", len(items))
+
+		m.Status = fmt.Sprintf("Fetched %d items", len(newItems))
 		m.Loading = false
 		return m, nil
 
