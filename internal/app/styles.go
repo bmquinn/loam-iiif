@@ -24,4 +24,10 @@ var (
 	NoItemsStyle = lipgloss.NewStyle().Margin(1, 0)
 
 	SpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	// New Style for Focused "LoamIIIF" Title
+	FocusedTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("206")).
+				Underline(true) // Optional: Adds underline to indicate focus
 )

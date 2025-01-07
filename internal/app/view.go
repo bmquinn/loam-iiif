@@ -39,10 +39,19 @@ func (m *Model) View() string {
 			BorderStyle.Render(detailString),
 		)
 	} else {
-		// Show list
+		// Conditionally apply focused style to Results
+		var resultsView string
+		if m.InList {
+			// Apply FocusedBorderStyle when "Results" is focused
+			resultsView = FocusedBorderStyle.Render(m.List.View())
+		} else {
+			// Use default BorderStyle otherwise
+			resultsView = BorderStyle.Render(m.List.View())
+		}
+
 		sections = append(sections,
 			TitleStyle.Render("Results"),
-			BorderStyle.Render(m.List.View()),
+			resultsView,
 		)
 	}
 
@@ -51,6 +60,7 @@ func (m *Model) View() string {
 		HelpStyle.Render("Tab: Switch Focus | Enter: Open Detail | O: Open URL in browser | Esc: Quit/Close Detail"),
 	)
 
+	// Join all sections vertically with left alignment
 	mainContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	return lipgloss.NewStyle().Padding(1, 2).Render(mainContent)
 }
