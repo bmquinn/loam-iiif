@@ -9,10 +9,25 @@ import (
 func (m *Model) View() string {
 	var sections []string
 
-	// Title and TextArea
+	// Conditionally apply FocusedTitleStyle when TextArea is focused
+	var title string
+	if !m.InList {
+		title = FocusedTitleStyle.Render("LoamIIIF")
+	} else {
+		title = TitleStyle.Render("LoamIIIF")
+	}
+
+	// Conditionally apply BorderStyle or FocusedBorderStyle to TextArea
+	var textAreaView string
+	if !m.InList {
+		textAreaView = FocusedBorderStyle.Render(m.TextArea.View())
+	} else {
+		textAreaView = BorderStyle.Render(m.TextArea.View())
+	}
+
 	sections = append(sections,
-		TitleStyle.Render("LoamIIIF"),
-		FocusedBorderStyle.Render(m.TextArea.View()),
+		title,
+		textAreaView,
 	)
 
 	// Status
