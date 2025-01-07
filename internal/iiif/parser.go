@@ -7,15 +7,6 @@ import (
 	"github.com/bmquinn/loam-iiif/internal/ui"
 )
 
-type iiifListItem struct {
-	title string
-	desc  string
-}
-
-func (i iiifListItem) Title() string       { return i.title }
-func (i iiifListItem) Description() string { return i.desc }
-func (i iiifListItem) FilterValue() string { return i.title + " " + i.desc }
-
 func ParseData(data []byte) []ui.Item {
 	var raw interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
