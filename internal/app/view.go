@@ -48,7 +48,7 @@ func (m *Model) View() string {
 
 	// Footer help
 	sections = append(sections,
-		HelpStyle.Render("Tab: Switch Focus | Enter: Submit URL (or Open Detail) | O: Open URL | Esc: Quit/Close Detail"),
+		HelpStyle.Render("Tab: Switch Focus | Enter: Open Detail | O: Open URL in browser | Esc: Quit/Close Detail"),
 	)
 
 	mainContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
