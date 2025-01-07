@@ -17,7 +17,7 @@ LoamIIIF is a terminal-based IIIF (International Image Interoperability Framewor
 ## Installation
 
 ```bash
-go install github.com/bmquinn/loam-iiif@latest
+go install github.com/bmquinn/loam-iiif/cmd/loam-iiif@latest
 ```
 
 ## Usage

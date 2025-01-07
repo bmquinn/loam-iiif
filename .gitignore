@@ -1,4 +1,7 @@
 coverage.txt
 dist/
 
+.DS_Store
+
 loam-iiif
+!cmd/loam-iiif
