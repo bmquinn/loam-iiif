@@ -5,192 +5,103 @@ import (
 	"strings"
 
 	"github.com/bmquinn/loam-iiif/internal/ui"
-	"github.com/charmbracelet/bubbles/list"
 )
 
-// Label represents the various ways labels can be structured in IIIF
-type Label struct {
-	None []string          `json:"none,omitempty"`
-	En   []string          `json:"en,omitempty"`
-	Raw  string            `json:"@value,omitempty"`
-	Map  map[string]string `json:"-"`
+type iiifListItem struct {
+	title string
+	desc  string
 }
 
-// UnmarshalJSON handles the various label formats
-func (l *Label) UnmarshalJSON(data []byte) error {
-	// Try structured format first
-	type labelAlias Label
-	if err := json.Unmarshal(data, (*labelAlias)(l)); err == nil {
-		return nil
-	}
+func (i iiifListItem) Title() string       { return i.title }
+func (i iiifListItem) Description() string { return i.desc }
+func (i iiifListItem) FilterValue() string { return i.title + " " + i.desc }
 
-	// Try string format
-	var str string
-	if err := json.Unmarshal(data, &str); err == nil {
-		l.None = []string{str}
-		return nil
-	}
-
-	// Try map format
-	if err := json.Unmarshal(data, &l.Map); err == nil {
-		return nil
-	}
-
-	return nil // Return nil to skip invalid labels
-}
-
-// GetText returns the best available label text
-func (l Label) GetText() string {
-	if len(l.None) > 0 {
-		return l.None[0]
-	}
-	if len(l.En) > 0 {
-		return l.En[0]
-	}
-	if l.Raw != "" {
-		return l.Raw
-	}
-	if len(l.Map) > 0 {
-		// Try common language keys
-		for _, lang := range []string{"en", "none", "@value"} {
-			if val, ok := l.Map[lang]; ok {
-				return val
-			}
-		}
-		// Take first available value
-		for _, v := range l.Map {
-			return v
+func ParseData(data []byte) []ui.Item {
+	var raw interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return []ui.Item{
+			{URL: "Error", Title: "JSON parse error", ItemType: "Error"},
 		}
 	}
-	return "Untitled"
+	return parseIIIF(raw)
 }
 
-// IIIFResource is used for either v2 or v3 resources (Manifests, Collections, etc.)
-// We implement a custom unmarshaller so we can handle both "id" and "@id" (v3 vs v2).
-type IIIFResource struct {
-	ID    string `json:"-"` // We’ll fill this from either "id" or "@id"
-	Type  string `json:"-"` // We’ll fill this from either "type" or "@type"
-	Label Label  `json:"label,omitempty"`
-}
+// parseIIIF handles both v3 ("type": "Collection"/"Manifest") and v2 ("@type": "sc:Collection"/"sc:Manifest").
+func parseIIIF(val interface{}) []ui.Item {
+	var out []ui.Item
 
-// resourceAlias is an internal struct for decoding either v2 or v3 styles.
-type resourceAlias struct {
-	ID     string `json:"id,omitempty"`
-	AtID   string `json:"@id,omitempty"`
-	Type   string `json:"type,omitempty"`
-	AtType string `json:"@type,omitempty"`
-	Label  Label  `json:"label,omitempty"`
-}
-
-// UnmarshalJSON tries to decode both v3 ("id", "type") and v2 ("@id", "@type").
-func (r *IIIFResource) UnmarshalJSON(data []byte) error {
-	var tmp resourceAlias
-	if err := json.Unmarshal(data, &tmp); err != nil {
-		return err
+	m, ok := val.(map[string]interface{})
+	if !ok {
+		return out
 	}
 
-	// ID could come from "id" (v3) or "@id" (v2)
-	if tmp.ID != "" {
-		r.ID = tmp.ID
-	} else {
-		r.ID = tmp.AtID
-	}
+	v3Type, _ := m["type"].(string)
+	v2Type, _ := m["@type"].(string)
 
-	// Type could come from "type" (v3) or "@type" (v2)
-	if tmp.Type != "" {
-		r.Type = tmp.Type
-	} else {
-		r.Type = tmp.AtType
-	}
+	switch {
+	case strings.Contains(v2Type, "Collection") || v3Type == "Collection":
+		label := fetchLabel(m)
+		id := fetchID(m)
+		out = append(out, ui.Item{URL: id, Title: label, ItemType: "Collection"})
 
-	r.Label = tmp.Label
-	return nil
-}
-
-// IIIFCollection can hold both v2 and v3 fields: "items" (v3) or "manifests" (v2), etc.
-type IIIFCollection struct {
-	IIIFResource
-	Items     []IIIFResource    `json:"items,omitempty"`     // v3
-	Manifests []IIIFResource    `json:"manifests,omitempty"` // v2
-	Context   json.RawMessage   `json:"@context,omitempty"`
-	Members   []json.RawMessage `json:"members,omitempty"`
-	Sequences []json.RawMessage `json:"sequences,omitempty"`
-}
-
-// ParseData reads the raw JSON and returns a list of items (Collections + Manifests).
-func ParseData(data []byte) []list.Item {
-	var collection IIIFCollection
-	if err := json.Unmarshal(data, &collection); err != nil {
-		return []list.Item{
-			ui.Item{
-				URL:   "Error",
-				Title: "Failed to parse IIIF data: " + err.Error(),
-			},
-		}
-	}
-
-	items := []list.Item{}
-
-	// If it's a Collection-type resource
-	if isCollectionType(collection.Type) {
-
-		// Process v3 "items"
-		for _, item := range collection.Items {
-			switch {
-			case isManifestType(item.Type):
-				items = append(items, ui.Item{
-					URL:      item.ID,
-					Title:    item.Label.GetText(),
-					ItemType: "Manifest",
-				})
-			case isCollectionType(item.Type):
-				items = append(items, ui.Item{
-					URL:      item.ID,
-					Title:    item.Label.GetText(),
-					ItemType: "Collection",
-				})
+		// Recurse for v3 "items" array
+		if v3Type == "Collection" {
+			if arr, ok := m["items"].([]interface{}); ok {
+				for _, child := range arr {
+					out = append(out, parseIIIF(child)...)
+				}
 			}
 		}
 
-		// Also handle v2 "manifests"
-		for _, manifest := range collection.Manifests {
-			items = append(items, ui.Item{
-				URL:      manifest.ID,
-				Title:    manifest.Label.GetText(),
-				ItemType: "Manifest",
-			})
+		// Recurse for v2 "manifests" / "collections" arrays
+		if manifests, ok := m["manifests"].([]interface{}); ok {
+			for _, child := range manifests {
+				out = append(out, parseIIIF(child)...)
+			}
+		}
+		if collections, ok := m["collections"].([]interface{}); ok {
+			for _, child := range collections {
+				out = append(out, parseIIIF(child)...)
+			}
 		}
 
-	} else if isManifestType(collection.Type) {
-		// If top-level object is a single Manifest
-		items = append(items, ui.Item{
-			URL:      collection.ID,
-			Title:    collection.Label.GetText(),
-			ItemType: "Manifest",
-		})
+	case strings.Contains(v2Type, "Manifest") || v3Type == "Manifest":
+		label := fetchLabel(m)
+		id := fetchID(m)
+		out = append(out, ui.Item{URL: id, Title: label, ItemType: "Manifest"})
 	}
 
-	// If we didn't find anything
-	if len(items) == 0 {
-		return []list.Item{
-			ui.Item{
-				URL:   "Error",
-				Title: "No valid manifests or child collections found",
-			},
+	return out
+}
+
+func fetchID(m map[string]interface{}) string {
+	if id, ok := m["id"].(string); ok {
+		return id
+	}
+	if id, ok := m["@id"].(string); ok {
+		return id
+	}
+	return ""
+}
+
+func fetchLabel(m map[string]interface{}) string {
+	// Try IIIF v3 style label
+	if lab, ok := m["label"].(map[string]interface{}); ok {
+		for _, key := range []string{"en", "none"} {
+			if arr, ok := lab[key].([]interface{}); ok && len(arr) > 0 {
+				if str, ok := arr[0].(string); ok {
+					return str
+				}
+			}
+		}
+		// Possibly a single string "en"
+		if s, ok := lab["en"].(string); ok {
+			return s
 		}
 	}
-
-	return items
-}
-
-// We consider type "Collection" if it matches these known patterns
-func isCollectionType(t string) bool {
-	t = strings.ToLower(t)
-	return t == "collection" || t == "sc:collection" || strings.HasPrefix(t, "collection")
-}
-
-// We consider type "Manifest" if it matches these known patterns
-func isManifestType(t string) bool {
-	t = strings.ToLower(t)
-	return t == "manifest" || t == "sc:manifest" || strings.HasPrefix(t, "manifest")
+	// Try IIIF v2 style
+	if lbl, ok := m["label"].(string); ok {
+		return lbl
+	}
+	return ""
 }

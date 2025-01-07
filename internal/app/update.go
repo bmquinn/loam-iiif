@@ -8,6 +8,7 @@ import (
 	"github.com/bmquinn/loam-iiif/internal/iiif"
 	"github.com/bmquinn/loam-iiif/internal/types"
 	"github.com/bmquinn/loam-iiif/internal/ui"
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	bubbletea "github.com/charmbracelet/bubbletea"
@@ -205,9 +206,13 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 	case types.FetchDataMsg:
 		// We got new data back from the IIIF API
 		newItems := iiif.ParseData(msg)
+		var listItems []list.Item
+		for _, item := range newItems {
+			listItems = append(listItems, item)
+		}
 
 		m.Mutex.Lock()
-		m.List.SetItems(newItems)
+		m.List.SetItems(listItems)
 		m.Mutex.Unlock()
 
 		m.Status = fmt.Sprintf("Fetched %d items", len(newItems))
