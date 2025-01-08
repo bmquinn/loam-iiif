@@ -1,3 +1,5 @@
+// File: /loam/internal/app/styles.go
+
 package app
 
 import "github.com/charmbracelet/lipgloss"
@@ -30,4 +32,9 @@ var (
 				Bold(true).
 				Foreground(lipgloss.Color("206")).
 				Underline(true) // Optional: Adds underline to indicate focus
+
+	// AssistantStyle for Assistant messages
+	AssistantStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("42")) // Choose a distinct color for Assistant
 )
