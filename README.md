@@ -1,76 +1,129 @@
 # LoamIIIF
 
-⚠️ This project is in active development and is not yet stable. ⚠️
+A terminal user interface (TUI) for browsing IIIF resources with integrated AI chat capabilities powered by AWS Bedrock Nova Lite.
 
-LoamIIIF is a terminal-based IIIF (International Image Interoperability Framework) manifest browser. It provides a simple, efficient interface for exploring IIIF collections and manifests through a beautiful terminal user interface.
+## Prerequisites
 
-## Features
+Before running LoamIIIF, ensure you have the following:
 
-- Browse IIIF collections and manifests in a clean, intuitive interface
-- Support for multiple IIIF presentation API versions
-- Real-time URL validation
-- Direct browser integration for opening manifests
-- Responsive design that adapts to terminal size
-- Full keyboard navigation1
-- Clean, modern terminal UI with dynamic updates
+1. Go 1.21 or higher installed
+2. AWS CLI v2 installed and configured
+3. Active AWS SSO login session (`aws sso login`)
+4. AWS account with access to Amazon Bedrock and Nova Lite service
+   - Your AWS account must have Bedrock service enabled
+   - Access to Amazon Nova Lite (https://aws.amazon.com/ai/generative-ai/nova/) must be granted
+   - Appropriate IAM permissions to invoke Bedrock models
+
+## AWS Setup
+
+1. Configure AWS SSO:
+
+   ```bash
+   aws configure sso
+   ```
+
+   Follow the prompts to set up your SSO credentials.
+
+2. Login to AWS SSO:
+
+   ```bash
+   aws sso login
+   ```
+
+   This step is required before running LoamIIIF to ensure you have valid AWS credentials.
+
+3. Verify Bedrock Access:
+   - Ensure your AWS account has Bedrock service enabled
+   - Confirm you have access to Amazon Nova Lite in the Bedrock console
+   - Check that you have the necessary IAM permissions:
+     ```json
+     {
+       "Version": "2012-10-17",
+       "Statement": [
+         {
+           "Effect": "Allow",
+           "Action": ["bedrock:InvokeModel", "bedrock:ListFoundationModels"],
+           "Resource": "*"
+         }
+       ]
+     }
+     ```
 
 ## Installation
 
 ```bash
-go install github.com/bmquinn/loam-iiif/cmd/loam-iiif@latest
+go install github.com/bmquinn/loam-iiif@latest
+```
+
+Or clone the repository and build from source:
+
+```bash
+git clone https://github.com/bmquinn/loam-iiif.git
+cd loam-iiif
+go build
 ```
 
 ## Usage
 
-Launch LoamIIIF by running:
+1. Ensure you have an active AWS SSO session:
+
+   ```bash
+   aws sso login
+   ```
+
+2. Run LoamIIIF:
+   ```bash
+   loam-iiif
+   ```
+
+### Key Bindings
+
+- `Tab`: Switch focus between URL input and results list
+- `Enter`: Open detail view or navigate into collection
+- `O`: Open current item's URL in browser
+- `Esc`: Close detail view or go back to previous list
+- `c`: Toggle chat panel
+- `Ctrl+C`: Quit application
+
+### Chat Features
+
+The chat panel allows you to interact with AWS Bedrock Nova Lite model to ask questions about the IIIF resources you're browsing. The chat maintains context of your current navigation and can provide insights about the collections and manifests.
+
+## Configuration
+
+By default, LoamIIIF uses the following AWS configuration:
+
+- Region: us-east-1
+- Profile: default AWS SSO profile
+
+To use a different AWS SSO profile, set the AWS_PROFILE environment variable before running the application:
 
 ```bash
+export AWS_PROFILE="your-sso-profile-name"
 loam-iiif
 ```
 
-### Basic Controls
+You can also set it for a single run:
 
-- **Tab**: Switch focus between URL input and results list
-- **Enter**: Submit URL for processing
-- **O**: Open selected manifest in default browser
-- **↑/↓ or j/k**: Navigate through results
-- **Ctrl+C/Esc**: Quit application
+```bash
+AWS_PROFILE="your-sso-profile-name" loam-iiif
+```
 
-### URL Input
+## Troubleshooting
 
-1. Enter a valid IIIF collection or manifest URL in the input field
-2. Press Enter to fetch and parse the IIIF data
-3. Use Tab to switch to the results list
-4. Navigate to desired manifest
-5. Press 'O' to open in browser
+1. **AWS SSO Session Expired**
 
-## Supported IIIF Formats
+   - Error: "Failed to initialize ChatService" or "expired credentials"
+   - Solution: Run `aws sso login` to refresh your credentials
 
-LoamIIIF supports both IIIF Presentation API 2.0 and 3.0 formats, including:
+2. **No Access to Nova Lite**
 
-- Collection manifests
-- Single manifests
-- Northwestern University style collections
-- National Library of Scotland style collections
+   - Error: "AccessDeniedException" when sending chat messages
+   - Solution: Ensure your AWS account has access to Amazon Bedrock and Nova Lite service
 
-## Requirements
-
-- Minimum terminal size: 60x20 characters
-- Go 1.16 or higher
-- Operating system with support for opening URLs in browser (Linux, macOS, Windows)
-
-## Dependencies
-
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea) - Terminal UI framework
-- [Lip Gloss](https://github.com/charmbracelet/lipgloss) - Style definitions
-- [Bubbles](https://github.com/charmbracelet/bubbles) - UI components
-
-## Error Handling
-
-- Invalid URLs are caught and reported
-- Network errors are displayed in the status bar
-- Parse errors for invalid IIIF data are handled gracefully
-- Window size constraints are enforced with clear error messages
+3. **Invalid AWS Region**
+   - Error: "model is not supported in this Region"
+   - Solution: Ensure you're using us-east-1 region where Nova Lite is available
 
 ## Contributing
 
