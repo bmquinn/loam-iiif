@@ -1,3 +1,5 @@
+// File: /loam/internal/app/update.go
+
 package app
 
 import (
@@ -11,29 +13,27 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
-	bubbletea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
-	MinWidth  = 60
-	MinHeight = 20
+	MinWidth  = 80
+	MinHeight = 24
 )
 
-// Init sets up any initial commands for the Bubble Tea program.
-func (m *Model) Init() bubbletea.Cmd {
-	return bubbletea.Batch(
-		textarea.Blink,
-		m.Spinner.Tick,
-	)
-}
-
 // Update is the main update loop for the Bubble Tea program.
-func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
-	var cmds []bubbletea.Cmd
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	// If the Chat panel is open, let the chat sub-update handle most inputs first.
+	if m.ShowChat {
+		newModel, subCmd := m.updateChat(msg)
+		return newModel, subCmd
+	}
 
 	switch msg := msg.(type) {
 
-	case bubbletea.WindowSizeMsg:
+	case tea.WindowSizeMsg:
 		if msg.Width < MinWidth || msg.Height < MinHeight {
 			m.Status = fmt.Sprintf("Window too small. Minimum size is %dx%d", MinWidth, MinHeight)
 			return m, nil
@@ -54,33 +54,57 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 			titleHeight  = 1
 			statusHeight = 3
 			helpHeight   = 1
+			modelsHeight = 0 // Fixed height for foundation models
 			sectionGap   = 1
 		)
 
-		totalOverhead := titleHeight + textareaHeight + statusHeight + helpHeight + (sectionGap * 3)
+		totalOverhead := titleHeight + textareaHeight + statusHeight + modelsHeight + helpHeight + (sectionGap * 4)
 		listHeight := contentHeight - totalOverhead
 		if listHeight < 1 {
 			listHeight = 1
 		}
 		m.List.SetWidth(contentWidth - 2)
 		m.List.SetHeight(listHeight - 2)
+
+		// Update foundation models viewport size
+		m.ModelViewport.Width = contentWidth - 2
+		m.ModelViewport.Height = modelsHeight
+		m.ModelViewport.SetContent("Loading models...") // Reset content on resize
+
+		// Also update chat sub-model to match new window size
+		m.Chat.Viewport.Width = contentWidth - 2
+		m.Chat.TextArea.SetWidth(contentWidth - 2)
+
 		return m, nil
 
-	case bubbletea.KeyMsg:
+	case tea.KeyMsg:
 		key := msg.String()
+
+		// Toggle chat with "c"
+		if key == "c" || key == "C" {
+			m.ShowChat = !m.ShowChat
+			if m.ShowChat {
+				m.Status = "Opened chat panel."
+				// Focus the chat text area
+				m.Chat.TextArea.Focus()
+			} else {
+				m.Status = "Closed chat panel."
+			}
+			return m, nil
+		}
 
 		// If detail pane is open, check if user wants to close it with "esc"
 		if m.ShowDetail {
 			switch key {
 			case "ctrl+c":
-				return m, bubbletea.Quit
+				return m, tea.Quit
 			case "esc":
 				// Close the detail pane
 				m.ShowDetail = false
 				m.Status = "Closed detail pane."
 				return m, nil
 			}
-			// If the detail pane is open, we ignore other keys
+			// If the detail pane is open, ignore other keys
 			return m, nil
 		}
 
@@ -88,11 +112,7 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 		if !m.InList {
 			switch key {
 			case "ctrl+c":
-				// (NEW) We remove "esc" from here so it doesn't quit.
-				return m, bubbletea.Quit
-
-			// case "esc": do nothing here, or implement "go back" if you want
-			// to return from the input form to something else. Usually not needed.
+				return m, tea.Quit
 
 			case "tab":
 				m.TextArea.Blur()
@@ -118,23 +138,25 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 					m.Status = "Fetching data..."
 					m.Loading = true
 					cmds = append(cmds, iiif.FetchData(urlInput), m.Spinner.Tick)
-					return m, bubbletea.Batch(cmds...)
+					return m, tea.Batch(cmds...)
 				}
 			}
-			var cmd bubbletea.Cmd
+			var cmd tea.Cmd
 			m.TextArea, cmd = m.TextArea.Update(msg)
-			cmds = append(cmds, cmd)
-			return m, bubbletea.Batch(cmds...)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
 		}
 
 		// If we ARE in the list:
 		switch key {
 		case "ctrl+c":
-			// Only Ctrl+C quits. (Removed "esc" here!)
-			return m, bubbletea.Quit
+			// Only Ctrl+C quits.
+			return m, tea.Quit
 
 		case "esc":
-			// (NEW) Instead of quitting, let's go "back" if possible.
+			// Instead of quitting, let's go "back" if possible.
 			if len(m.PrevItemsStack) > 0 {
 				// Pop the last item slice from the stack
 				lastIndex := len(m.PrevItemsStack) - 1
@@ -145,7 +167,6 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 				m.List.SetItems(prevItems)
 				m.Status = "Went back to previous list."
 			} else {
-				// No previous list: do nothing or set a status
 				m.Status = "No previous items to go back to."
 			}
 			return m, nil
@@ -157,7 +178,6 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 			return m, nil
 
 		case "up", "down", "k", "j":
-			// If the status was "Opened in browser", reset it
 			if m.Status == "Opened in browser" {
 				m.Status = "Ready"
 			}
@@ -166,14 +186,14 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 			// Show detail or fetch nested collection
 			if item, ok := m.List.SelectedItem().(ui.Item); ok {
 				if strings.EqualFold(item.ItemType, "collection") {
-					// (NEW) Before we fetch nested items, push the CURRENT list onto the stack
+					// Push the CURRENT list onto the stack
 					currentItems := m.List.Items()
 					m.PrevItemsStack = append(m.PrevItemsStack, currentItems)
 
-					// Now fetch the new collection
+					// Fetch the new collection
 					m.Status = "Fetching nested collection..."
 					m.Loading = true
-					return m, bubbletea.Batch(
+					return m, tea.Batch(
 						iiif.FetchData(item.URL),
 						m.Spinner.Tick,
 					)
@@ -188,7 +208,6 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 			return m, nil
 
 		case "o", "O":
-			// 'Open in browser'
 			if item, ok := m.List.SelectedItem().(ui.Item); ok && item.URL != "Error" {
 				if err := iiif.OpenURL(item.URL); err != nil {
 					m.Status = "Failed to open URL"
@@ -199,9 +218,11 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 			}
 		}
 
-		var cmd bubbletea.Cmd
+		var cmd tea.Cmd
 		m.List, cmd = m.List.Update(msg)
-		cmds = append(cmds, cmd)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 
 	case types.FetchDataMsg:
 		// We got new data back from the IIIF API
@@ -217,6 +238,15 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 
 		m.Status = fmt.Sprintf("Fetched %d items", len(newItems))
 		m.Loading = false
+
+		// Extract relevant context from newItems and store it
+		// For example, concatenate titles or descriptions
+		var contextBuilder strings.Builder
+		for _, item := range newItems {
+			contextBuilder.WriteString(fmt.Sprintf("Title: %s\nURL: %s\n\n", item.Title, item.URL))
+		}
+		m.Chat.Context = contextBuilder.String()
+
 		return m, nil
 
 	case types.ErrMsg:
@@ -225,14 +255,121 @@ func (m *Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		var cmd bubbletea.Cmd
+		var cmd tea.Cmd
 		m.Spinner, cmd = m.Spinner.Update(msg)
 		if m.Loading {
 			cmds = append(cmds, m.Spinner.Tick)
 		}
-		cmds = append(cmds, cmd)
-		return m, bubbletea.Batch(cmds...)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return m, tea.Batch(cmds...)
+
+	case FoundationModelsMsg:
+		// Handle the received foundation models
+		if len(msg.Models) == 0 {
+			m.ModelViewport.SetContent("No foundation models available.")
+		} else {
+			modelList := "Available Foundation Models:\n\n"
+			for _, modelID := range msg.Models {
+				modelList += "- " + modelID + "\n"
+			}
+			m.ModelViewport.SetContent(modelList)
+		}
+		m.Status = "Loaded foundation models."
+		return m, nil
+
+		// You can add more cases here if needed.
+
 	}
 
-	return m, bubbletea.Batch(cmds...)
+	return m, tea.Batch(cmds...)
+}
+
+// Init sets up any initial commands for the Bubble Tea program.
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(
+		textarea.Blink,
+		m.Spinner.Tick,
+		GetModels(), // Fetch foundation models at startup
+	)
+}
+
+// updateChat handles messages for the chat panel when it's open.
+func (m *Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		tiCmd   tea.Cmd
+		vpCmd   tea.Cmd
+		chatCmd tea.Cmd
+	)
+
+	// Update text area and viewport
+	m.Chat.TextArea, tiCmd = m.Chat.TextArea.Update(msg)
+	m.Chat.Viewport, vpCmd = m.Chat.Viewport.Update(msg)
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// Resize chat sub-model
+		m.Chat.Viewport.Width = msg.Width - 4
+		m.Chat.Viewport.Height = msg.Height / 3
+		m.Chat.TextArea.SetWidth(msg.Width - 4)
+
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEsc, tea.KeyCtrlC:
+			// Close chat if user presses Esc or Ctrl+C
+			m.ShowChat = false
+			m.Status = "Closed chat panel."
+			return m, nil
+
+		case tea.KeyEnter:
+			// On Enter, send the message to Bedrock
+			userInput := strings.TrimSpace(m.Chat.TextArea.Value())
+			if userInput == "" {
+				// Ignore empty messages
+				return m, nil
+			}
+
+			// Append user's message
+			userMessage := m.Chat.SenderStyle.Render("You: ") + userInput
+			m.Chat.Messages = append(m.Chat.Messages, userMessage)
+
+			// Update chat viewport
+			m.Chat.Viewport.SetContent(strings.Join(m.Chat.Messages, "\n\n"))
+			m.Chat.Viewport.GotoBottom()
+
+			// Clear the text area
+			m.Chat.TextArea.Reset()
+
+			// Send the message to Bedrock with context
+			chatCmd = SendChat(userInput, m.Chat.Context)
+			return m, tea.Batch(tiCmd, vpCmd, chatCmd)
+		}
+
+	case ChatResponseMsg:
+		// Append the assistant's response to messages
+		assistantResponse := strings.TrimSpace(msg.Response)
+		if assistantResponse != "" {
+			assistantMessage := AssistantStyle.Render("Assistant: ") + assistantResponse
+			m.Chat.Messages = append(m.Chat.Messages, assistantMessage)
+			// log.Printf("Assistant message appended: %s", assistantResponse)
+
+			// Update chat viewport
+			m.Chat.Viewport.SetContent(strings.Join(m.Chat.Messages, "\n\n"))
+			m.Chat.Viewport.GotoBottom()
+		}
+		return m, nil
+
+	case ChatErrorMsg:
+		// Append the error message to messages
+		errorMessage := m.Chat.SenderStyle.Render("Error: ") + msg.Error.Error()
+		m.Chat.Messages = append(m.Chat.Messages, errorMessage)
+
+		// Update chat viewport
+		m.Chat.Viewport.SetContent(strings.Join(m.Chat.Messages, "\n\n"))
+		m.Chat.Viewport.GotoBottom()
+		return m, nil
+	}
+
+	return m, tea.Batch(tiCmd, vpCmd, chatCmd)
 }
