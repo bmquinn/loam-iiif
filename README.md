@@ -52,7 +52,7 @@ Before running LoamIIIF, ensure you have the following:
 ## Installation
 
 ```bash
-go install github.com/bmquinn/loam-iiif@latest
+go install github.com/bmquinn/loam-iiif/cmd/loam-iiif@latest
 ```
 
 Or clone the repository and build from source:
