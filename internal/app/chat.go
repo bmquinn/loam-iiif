@@ -203,3 +203,50 @@ func GetModels() tea.Cmd {
 	}
 	return chatServiceInstance.GetFoundationModels()
 }
+
+// SendChatSync sends a prompt with context to the chat model synchronously
+func (cs *ChatService) SendChatSync(prompt string, chatContext string) (string, error) {
+	modelID := "amazon.nova-lite-v1:0" // Ensure this is the correct model ID
+
+	combinedText := fmt.Sprintf("%s\n\n%s", chatContext, prompt)
+
+	userMessage := Message{
+		Role: "user",
+		Content: []TextContent{
+			{Text: combinedText},
+		},
+	}
+
+	requestPayload := ChatRequest{
+		InferenceConfig: InferenceConfig{
+			MaxNewTokens: 1000,
+		},
+		Messages: []Message{userMessage},
+	}
+
+	body, err := json.Marshal(requestPayload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request payload: %w", err)
+	}
+
+	output, err := cs.BedrockClient.InvokeModel(context.Background(), &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String(modelID),
+		ContentType: aws.String("application/json"),
+		Body:        body,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to invoke model: %w", err)
+	}
+
+	var response ChatResponse
+	if err := json.Unmarshal(output.Body, &response); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(response.Output.Message.Content) > 0 {
+		assistantMessage := response.Output.Message.Content[0].Text
+		return assistantMessage, nil
+	}
+
+	return "", fmt.Errorf("no assistant message found in the response")
+}

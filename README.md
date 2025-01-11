@@ -2,6 +2,20 @@
 
 A terminal user interface (TUI) for browsing IIIF resources with integrated AI chat capabilities powered by AWS Bedrock Nova Lite.
 
+## Installation
+
+```bash
+go install github.com/bmquinn/loam-iiif/cmd/loam-iiif@latest
+```
+
+Or clone the repository and build from source:
+
+```bash
+git clone https://github.com/bmquinn/loam-iiif.git
+cd loam-iiif
+go build
+```
+
 ## Prerequisites
 
 Before running LoamIIIF, ensure you have the following:
@@ -49,21 +63,9 @@ Before running LoamIIIF, ensure you have the following:
      }
      ```
 
-## Installation
-
-```bash
-go install github.com/bmquinn/loam-iiif/cmd/loam-iiif@latest
-```
-
-Or clone the repository and build from source:
-
-```bash
-git clone https://github.com/bmquinn/loam-iiif.git
-cd loam-iiif
-go build
-```
-
 ## Usage
+
+### Interactive Mode
 
 1. Ensure you have an active AWS SSO session:
 
@@ -84,6 +86,25 @@ go build
 - `Esc`: Close detail view or go back to previous list
 - `c`: Toggle chat panel
 - `Ctrl+C`: Quit application
+
+### Command-Line Usage
+
+You can use LoamIIIF directly from the command line by providing the `--manifest` URL and a `--prompt`. Here's an example:
+
+```bash
+loam-iiif --manifest https://api.dc.library.northwestern.edu/api/v2/collections/59ec43f9-a96c-4314-9b44-9923790b371c\?as\=iiif --prompt "Can you translate these titles into English?"
+```
+
+**Expected Output:**
+
+```
+Certainly! Here are the translated titles from Arabic to English:
+
+1. **Arabic Manuscripts from West Africa**
+   - Arabic: مخطوطات عربية من غرب أفريقيا
+
+2 ...
+```
 
 ### Chat Features
 
