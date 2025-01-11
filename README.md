@@ -89,6 +89,8 @@ Before running LoamIIIF, ensure you have the following:
 
 ### Command-Line Usage
 
+![Loam IIIF Demo](loam-iiif.gif)
+
 You can use LoamIIIF directly from the command line by providing the `--manifest` URL and a `--prompt`. Here's an example:
 
 ```bash
